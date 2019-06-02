@@ -8,17 +8,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var zones []cloudflare.Zone
+
 func sync(ips []string, dnsNames []string, cloudflareTTL int, cloudflareProxy bool) error {
 	api, err := cloudflare.New(options.CloudflareAPIKey, options.CloudflareAPIEmail)
 	if err != nil {
 		return errors.Wrap(err, "failed to access cloudflare api")
-	}
-
-	root := dnsNames[0]
-	zoneID, err := findZoneID(api, root)
-	if err != nil {
-		return errors.Wrapf(err, "failed to find zone id for dns-name:=%s",
-			root)
 	}
 
 	known := map[string]bool{}
@@ -27,6 +22,11 @@ func sync(ips []string, dnsNames []string, cloudflareTTL int, cloudflareProxy bo
 	}
 
 	for _, dnsName := range dnsNames {
+		zoneID, err := findZoneID(api, dnsName)
+    	if err != nil {
+    		return errors.Wrapf(err, "failed to find zone id for dns-name:=%s", dnsName)
+    	}
+
 		records, err := api.DNSRecords(zoneID, cloudflare.DNSRecord{Type: "A", Name: dnsName})
 		if err != nil {
 			return errors.Wrapf(err, "failed to list dns records for zone-id=%s name=%s",
@@ -94,9 +94,13 @@ func sync(ips []string, dnsNames []string, cloudflareTTL int, cloudflareProxy bo
 func findZoneID(api interface {
 	ListZones(z ...string) ([]cloudflare.Zone, error)
 }, dnsName string) (string, error) {
-	zones, err := api.ListZones()
-	if err != nil {
-		return "", err
+	if zones == nil {
+		zonesList, err := api.ListZones()
+    	if err != nil {
+    		return "", err
+    	}
+
+    	zones = zonesList
 	}
 
 	for _, zone := range zones {
